@@ -4,8 +4,7 @@
 #include <exception>
 #include <iostream>
 
-#define kBackbufferWidth 1280
-#define kBackbufferHeight 720
+#include "Config.h"
 
 static HINSTANCE g_HInstance;
 static HWND g_Wnd;
@@ -26,7 +25,24 @@ static IDXGISwapChain* g_D3D11SwapChain = nullptr;
 static ID3D11RenderTargetView* g_D3D11RenderTarget = nullptr;
 static ID3D11VertexShader* g_VertexShader;
 static ID3D11PixelShader* g_PixelShader;
+static ID3D11ComputeShader* g_ComputeShader;
+static ID3D11Texture2D* g_BackbufferTexture1;
+static ID3D11Texture2D* g_BackbufferTexture2;
+static ID3D11ShaderResourceView* g_BackbufferSRV1;
+static ID3D11ShaderResourceView* g_BackbufferSRV2;
+static ID3D11UnorderedAccessView* g_BackbufferUAV1;
+static ID3D11UnorderedAccessView* g_BackbufferUAV2;
+static ID3D11SamplerState* g_SamplerLinear;
 static ID3D11RasterizerState* g_RasterState;
+static int g_BackbufferIndex = 0;
+static int s_FrameCount = 0;
+
+struct ComputeParams
+{
+    int frames;
+};
+static ID3D11Buffer* g_DataParams;
+static ID3D11ShaderResourceView* g_SRVParams;
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int nCmdShow)
 {
@@ -223,6 +239,7 @@ void InitRenderResource()
 {
     ID3DBlob* vertexShaderBlob = nullptr;
     ID3DBlob* pixelShaderBlob = nullptr;
+    ID3DBlob* computeShaderBlob = nullptr;
     ID3DBlob* errors = nullptr;
 
 #ifdef _DEBUG
@@ -233,10 +250,15 @@ void InitRenderResource()
 
     std::wstring vertPath = L"VertexShader.hlsl";
     std::wstring fragPath = L"PixelShader.hlsl";
+    std::wstring compPath = L"ComputeShader.hlsl";
     try
     {
-        D3DCompileFromFile(vertPath.c_str(), nullptr, nullptr, "main", "vs_5_0", compileFlags, 0, &vertexShaderBlob, &errors);
-        D3DCompileFromFile(fragPath.c_str(), nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &pixelShaderBlob, &errors);
+        D3DCompileFromFile(vertPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                           "main", "vs_5_0", compileFlags, 0, &vertexShaderBlob, &errors);
+        D3DCompileFromFile(fragPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                           "main", "ps_5_0", compileFlags, 0, &pixelShaderBlob, &errors);
+        D3DCompileFromFile(compPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                           "main", "cs_5_0", compileFlags, 0, &computeShaderBlob, &errors);
     }
     catch (const std::exception& e)
     {
@@ -252,16 +274,91 @@ void InitRenderResource()
                                      pixelShaderBlob->GetBufferSize(),
                                      NULL, &g_PixelShader);
 
+    g_D3D11Device->CreateComputeShader(computeShaderBlob->GetBufferPointer(),
+                                       computeShaderBlob->GetBufferSize(),
+                                       NULL, &g_ComputeShader);
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = kBackbufferWidth;
+    texDesc.Height = kBackbufferHeight;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.SampleDesc.Quality = 0;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+    texDesc.CPUAccessFlags = 0;
+    texDesc.MiscFlags = 0;
+    g_D3D11Device->CreateTexture2D(&texDesc, NULL, &g_BackbufferTexture1);
+    g_D3D11Device->CreateTexture2D(&texDesc, NULL, &g_BackbufferTexture2);
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = texDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    g_D3D11Device->CreateShaderResourceView(g_BackbufferTexture1, &srvDesc, &g_BackbufferSRV1);
+    g_D3D11Device->CreateShaderResourceView(g_BackbufferTexture2, &srvDesc, &g_BackbufferSRV2);
+
+    D3D11_SAMPLER_DESC smpDesc = {};
+    smpDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+    smpDesc.AddressU = smpDesc.AddressV = smpDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    g_D3D11Device->CreateSamplerState(&smpDesc, &g_SamplerLinear);
+
     D3D11_RASTERIZER_DESC rasterDesc = {};
     rasterDesc.FillMode = D3D11_FILL_SOLID;
     rasterDesc.CullMode = D3D11_CULL_NONE;
     g_D3D11Device->CreateRasterizerState(&rasterDesc, &g_RasterState);
+
+    D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+    uavDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+    uavDesc.Texture2D.MipSlice = 0;
+    g_D3D11Device->CreateUnorderedAccessView(g_BackbufferTexture1, &uavDesc, &g_BackbufferUAV1);
+    g_D3D11Device->CreateUnorderedAccessView(g_BackbufferTexture2, &uavDesc, &g_BackbufferUAV2);
+
+    D3D11_BUFFER_DESC bdesc = {};
+    bdesc.Usage = D3D11_USAGE_DEFAULT;
+    bdesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    bdesc.CPUAccessFlags = 0;
+    bdesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+    srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+    srvDesc.Buffer.FirstElement = 0;
+
+    bdesc.ByteWidth = sizeof(ComputeParams);
+    bdesc.StructureByteStride = sizeof(ComputeParams);
+    g_D3D11Device->CreateBuffer(&bdesc, NULL, &g_DataParams);
+    srvDesc.Buffer.NumElements = 1;
+    g_D3D11Device->CreateShaderResourceView(g_DataParams, &srvDesc, &g_SRVParams);
 }
 
 static void RenderFrame()
 {
+    ComputeParams dataParams;
+    dataParams.frames = ++s_FrameCount;
+    g_D3D11Ctx->UpdateSubresource(g_DataParams, 0, NULL, &dataParams, 0, 0);
+
+    g_BackbufferIndex = 1 - g_BackbufferIndex;
+    g_D3D11Ctx->CSSetShader(g_ComputeShader, NULL, 0);
+    ID3D11ShaderResourceView* srvs[] = {
+        g_BackbufferIndex == 0 ? g_BackbufferSRV2 : g_BackbufferSRV1,
+        g_SRVParams
+    };
+    g_D3D11Ctx->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+    ID3D11UnorderedAccessView* uavs[] = {
+        g_BackbufferIndex == 0 ? g_BackbufferUAV1 : g_BackbufferUAV2,
+    };
+    g_D3D11Ctx->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, NULL);
+    g_D3D11Ctx->Dispatch(kBackbufferWidth / kCSGroupSizeX, kBackbufferHeight / kCSGroupSizeY, 1);
+    uavs[0] = NULL;
+    g_D3D11Ctx->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, NULL);
+
     g_D3D11Ctx->VSSetShader(g_VertexShader, NULL, 0);
     g_D3D11Ctx->PSSetShader(g_PixelShader, NULL, 0);
+    g_D3D11Ctx->PSSetShaderResources(0, 1, g_BackbufferIndex == 0 ? &g_BackbufferSRV1 : &g_BackbufferSRV2);
+    g_D3D11Ctx->PSSetSamplers(0, 1, &g_SamplerLinear);
     g_D3D11Ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     g_D3D11Ctx->RSSetState(g_RasterState);
     g_D3D11Ctx->Draw(3, 0);
