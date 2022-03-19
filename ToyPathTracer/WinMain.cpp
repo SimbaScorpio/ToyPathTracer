@@ -1,5 +1,8 @@
 #include <windows.h>
 #include <d3d11.h>
+#include <d3dcompiler.h>
+#include <exception>
+#include <iostream>
 
 #define kBackbufferWidth 1280
 #define kBackbufferHeight 720
@@ -13,6 +16,7 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 
 static HRESULT InitD3DDevice();
 static void ShutdownD3DDevice();
+static void InitRenderResource();
 static void RenderFrame();
 
 static D3D_FEATURE_LEVEL g_D3D11FeatureLevel = D3D_FEATURE_LEVEL_11_0;
@@ -20,6 +24,9 @@ static ID3D11Device* g_D3D11Device = nullptr;
 static ID3D11DeviceContext* g_D3D11Ctx = nullptr;
 static IDXGISwapChain* g_D3D11SwapChain = nullptr;
 static ID3D11RenderTargetView* g_D3D11RenderTarget = nullptr;
+static ID3D11VertexShader* g_VertexShader;
+static ID3D11PixelShader* g_PixelShader;
+static ID3D11RasterizerState* g_RasterState;
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int nCmdShow)
 {
@@ -34,6 +41,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR,
         ShutdownD3DDevice();
         return 0;
     }
+
+    InitRenderResource();
 
     // Main message loop
     MSG msg = { 0 };
@@ -112,9 +121,10 @@ static HRESULT InitD3DDevice()
 {
     HRESULT hr = S_OK;
 
-    UINT createDeviceFlags = 0;
 #ifdef _DEBUG
-    createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+    UINT createDeviceFlags = D3D11_CREATE_DEVICE_DEBUG;
+#else
+    UINT createDeviceFlags = 0;
 #endif
 
     D3D_FEATURE_LEVEL featureLevels[] =
@@ -209,10 +219,51 @@ static void ShutdownD3DDevice()
     if (g_D3D11Device) g_D3D11Device->Release();
 }
 
+void InitRenderResource()
+{
+    ID3DBlob* vertexShaderBlob = nullptr;
+    ID3DBlob* pixelShaderBlob = nullptr;
+    ID3DBlob* errors = nullptr;
+
+#ifdef _DEBUG
+    UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+    UINT compileFlags = 0;
+#endif
+
+    std::wstring vertPath = L"VertexShader.hlsl";
+    std::wstring fragPath = L"PixelShader.hlsl";
+    try
+    {
+        D3DCompileFromFile(vertPath.c_str(), nullptr, nullptr, "main", "vs_5_0", compileFlags, 0, &vertexShaderBlob, &errors);
+        D3DCompileFromFile(fragPath.c_str(), nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &pixelShaderBlob, &errors);
+    }
+    catch (const std::exception& e)
+    {
+        const char* errStr = (const char*)errors->GetBufferPointer();
+        std::cout << errStr << std::endl;
+    }
+
+    g_D3D11Device->CreateVertexShader(vertexShaderBlob->GetBufferPointer(),
+                                      vertexShaderBlob->GetBufferSize(),
+                                      NULL, &g_VertexShader);
+
+    g_D3D11Device->CreatePixelShader(pixelShaderBlob->GetBufferPointer(),
+                                     pixelShaderBlob->GetBufferSize(),
+                                     NULL, &g_PixelShader);
+
+    D3D11_RASTERIZER_DESC rasterDesc = {};
+    rasterDesc.FillMode = D3D11_FILL_SOLID;
+    rasterDesc.CullMode = D3D11_CULL_NONE;
+    g_D3D11Device->CreateRasterizerState(&rasterDesc, &g_RasterState);
+}
+
 static void RenderFrame()
 {
-    // TODO
-    FLOAT color[4] = { 1, 0, 0, 1 };
-    g_D3D11Ctx->ClearRenderTargetView(g_D3D11RenderTarget, color);
+    g_D3D11Ctx->VSSetShader(g_VertexShader, NULL, 0);
+    g_D3D11Ctx->PSSetShader(g_PixelShader, NULL, 0);
+    g_D3D11Ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    g_D3D11Ctx->RSSetState(g_RasterState);
+    g_D3D11Ctx->Draw(3, 0);
     g_D3D11SwapChain->Present(0, 0);
 }
