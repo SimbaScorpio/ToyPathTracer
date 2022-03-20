@@ -4,7 +4,34 @@
 Texture2D srcImage : register(t0);
 RWTexture2D<float4> dstImage : register(u0);
 StructuredBuffer<ComputeParams> g_Params : register(t1);
+StructuredBuffer<Sphere> g_Spheres : register(t2);
 
+///////////////////////////
+struct Ray
+{
+    float3 origin;
+    float3 dir;
+};
+Ray MakeRay(float3 origin, float3 dir)
+{
+    Ray r;
+    r.origin = origin;
+    r.dir = dir;
+    return r;
+}
+float3 RayPointAt(Ray r, float t)
+{
+    return r.origin + r.dir * t;
+}
+
+struct HitRecord
+{
+    float3 position;
+    float3 normal;
+    bool isFrontFace;
+};
+
+///////////////////////////
 inline uint RNG(inout uint seed)
 {
     uint x = seed;
@@ -58,13 +85,66 @@ Ray CameraGetRay(Camera cam, float u, float v, inout uint seed)
     return MakeRay(cam.origin + offset, dir);
 }
 
-float3 Trace(Ray r, inout uint seed)
+bool HitWorld(Ray ray, float tMin, float tMax, int count, inout HitRecord record)
 {
-    float t = (r.dir.y + 1.0) / 2.0;
-    float3 bgColor = lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0), t);
-    return bgColor;
+    bool hit = false;
+    for (int i = 0; i < count; ++i)
+    {
+        Sphere sphere = g_Spheres[i];
+        float3 oc = ray.origin - sphere.center;
+        float b = dot(oc, ray.dir);
+        float c = dot(oc, oc) - sphere.radius * sphere.radius;
+        float discriminant = b * b - c;
+
+        if (discriminant > 0)
+        {
+            float sqrtd = sqrt(discriminant);
+            float step = -b - sqrtd;
+            if (step <= tMin)
+            {
+                step = -b + sqrtd;
+            }
+            if (step > tMin && step < tMax)
+            {
+                hit = true;
+                record.position = RayPointAt(ray, step);
+                float3 normal = (record.position - sphere.center) / sphere.radius;
+                record.isFrontFace = dot(ray.dir, normal) < 0;
+                if (record.isFrontFace)
+                    record.normal = normal;
+                else
+                    record.normal = -normal;
+                tMax = step;
+            }
+        }
+    }
+    return hit;
 }
 
+float3 Trace(Ray ray, int count, inout uint seed)
+{
+    float3 color = 1;
+    for (int depth = kMaxDepth; depth > 0; --depth)
+    {
+        HitRecord record;
+        if (HitWorld(ray, kMinT, kMaxT, count, record))
+        {
+            color *= 0.5;//attenuation;
+            ray.origin = record.position;
+            ray.dir = normalize(record.normal + RandomUnitVector(seed));
+        }
+        else
+        {
+            float t = (ray.dir.y + 1.0) / 2.0;
+            float3 bgColor = lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0), t);
+            color *= bgColor;
+            break;
+        }
+    }
+    return color;
+}
+
+///////////////////////////
 [numthreads(kCSGroupSizeX, kCSGroupSizeX, 1)]
 void main(uint3 gid : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
 {
@@ -77,12 +157,12 @@ void main(uint3 gid : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
         float u = float(gid.x + RandomFloat01(seed)) / kBackbufferWidth;
         float v = float(gid.y + RandomFloat01(seed)) / kBackbufferHeight;
         Ray ray = CameraGetRay(params.camera, u, v, seed);
-        color += Trace(ray, seed);
+        color += Trace(ray, params.count, seed);
     }
-    color /= SAMPLES_PER_PIXEL;
+    color /= float(SAMPLES_PER_PIXEL);
 
     float3 prev = srcImage.Load(int3(gid.xy, 0)).rgb;
-    float3 curr = lerp(color, prev, 0);
+    float3 curr = lerp(color, prev, params.lerpFactor);
 
     dstImage[gid.xy] = float4(curr, 1.0);
 }

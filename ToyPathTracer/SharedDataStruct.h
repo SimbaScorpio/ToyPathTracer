@@ -3,24 +3,6 @@
 #include "Config.h"
 
 ///////////////////////////
-struct Ray
-{
-    float3 origin;
-    float3 dir;
-};
-Ray MakeRay(float3 origin, float3 dir)
-{
-    Ray r;
-    r.origin = origin;
-    r.dir = dir;
-    return r; 
-}
-float3 RayPointAt(Ray r, float t) 
-{ 
-    return r.origin + r.dir * t; 
-}
-
-///////////////////////////
 struct Camera
 {
     float3 origin;
@@ -58,5 +40,7 @@ struct Sphere
 struct ComputeParams
 {
     int frames;
+    float lerpFactor;
     Camera camera;
+    int count;
 };
