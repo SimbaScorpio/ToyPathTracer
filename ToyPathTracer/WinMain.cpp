@@ -5,6 +5,8 @@
 #include <iostream>
 
 #include "Config.h"
+#include "Maths.h"
+#include "SharedDataStruct.h"
 
 static HINSTANCE g_HInstance;
 static HWND g_Wnd;
@@ -34,13 +36,10 @@ static ID3D11UnorderedAccessView* g_BackbufferUAV1;
 static ID3D11UnorderedAccessView* g_BackbufferUAV2;
 static ID3D11SamplerState* g_SamplerLinear;
 static ID3D11RasterizerState* g_RasterState;
+
 static int g_BackbufferIndex = 0;
 static int s_FrameCount = 0;
 
-struct ComputeParams
-{
-    int frames;
-};
 static ID3D11Buffer* g_DataParams;
 static ID3D11ShaderResourceView* g_SRVParams;
 
@@ -338,6 +337,7 @@ static void RenderFrame()
 {
     ComputeParams dataParams;
     dataParams.frames = ++s_FrameCount;
+    dataParams.camera = MakeCamera(float3(0, 0, 0), float3(0, 0, -1), float3(0, 1, 0), 60, float(kBackbufferWidth) / float(kBackbufferHeight), 0, 10);
     g_D3D11Ctx->UpdateSubresource(g_DataParams, 0, NULL, &dataParams, 0, 0);
 
     g_BackbufferIndex = 1 - g_BackbufferIndex;
@@ -363,4 +363,7 @@ static void RenderFrame()
     g_D3D11Ctx->RSSetState(g_RasterState);
     g_D3D11Ctx->Draw(3, 0);
     g_D3D11SwapChain->Present(0, 0);
+
+    Sphere tmp;
+
 }
