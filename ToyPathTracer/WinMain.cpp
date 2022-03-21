@@ -5,8 +5,7 @@
 #include <iostream>
 
 #include "Config.h"
-#include "Maths.h"
-#include "SharedDataStruct.h"
+#include "TestScene.h"
 
 static HINSTANCE g_HInstance;
 static HWND g_Wnd;
@@ -17,8 +16,8 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 
 static HRESULT InitD3DDevice();
 static void ShutdownD3DDevice();
-static void InitRenderResource();
-static void RenderFrame();
+static void InitRenderResource(TestScene& scene);
+static void RenderFrame(TestScene& scene);
 
 static D3D_FEATURE_LEVEL g_D3D11FeatureLevel = D3D_FEATURE_LEVEL_11_0;
 static ID3D11Device* g_D3D11Device = nullptr;
@@ -47,39 +46,6 @@ static ID3D11ShaderResourceView* g_SRVSpheres;
 static ID3D11Buffer* g_DataMaterials;
 static ID3D11ShaderResourceView* g_SRVMaterials;
 
-//static Sphere s_Spheres[] =
-//{
-//    {0, float3(0, -1000, 0), 1000},
-//    {1, float3(0, 1, 0), 1},
-//    {2, float3(-4, 1, 0), 1},
-//    {3, float3(4, 1, 0), 1}
-//};
-static Sphere s_Spheres[] =
-{
-    {0, float3(0, -100.5, -1), 100},
-    {1, float3(0, 0, -1), 0.5},
-    {2, float3(-1, 0, -1), 0.5},
-    {2, float3(-1, 0, -1), -0.45},
-    {3, float3(1, 0, -1), 0.5}
-};
-const int kSphereCount = sizeof(s_Spheres) / sizeof(Sphere);
-
-//static Material s_Materials[] =
-//{
-//    {0, float3(0.5, 0.5, 0.5)},
-//    {2, float3(0, 0, 0), 0, 1.5},
-//    {0, float3(0.4, 0.2, 0.1)},
-//    {1, float3(0.7, 0.6, 0.5), 0}
-//};
-static Material s_Materials[] =
-{
-    {0, float3(0.8, 0.8, 0.0)},
-    {0, float3(0.1, 0.2, 0.5)},
-    {2, float3(0, 0, 0), 0, 1.5},
-    {1, float3(0.8, 0.6, 0.2), 0}
-};
-const int kMaterialCount = sizeof(s_Materials) / sizeof(Material);
-
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int nCmdShow)
 {
@@ -95,7 +61,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR,
         return 0;
     }
 
-    InitRenderResource();
+    TestScene scene;
+    InitRenderResource(scene);
 
     // Main message loop
     MSG msg = { 0 };
@@ -108,7 +75,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR,
         }
         else
         {
-            RenderFrame();
+            RenderFrame(scene);
         }
     }
 
@@ -272,7 +239,7 @@ static void ShutdownD3DDevice()
     if (g_D3D11Device) g_D3D11Device->Release();
 }
 
-void InitRenderResource()
+void InitRenderResource(TestScene& scene)
 {
     ID3DBlob* vertexShaderBlob = nullptr;
     ID3DBlob* pixelShaderBlob = nullptr;
@@ -370,31 +337,34 @@ void InitRenderResource()
     srvDesc.Buffer.NumElements = 1;
     g_D3D11Device->CreateShaderResourceView(g_DataParams, &srvDesc, &g_SRVParams);
 
-    bdesc.ByteWidth = kSphereCount * sizeof(Sphere);
+    bdesc.ByteWidth = scene.GetSphereSize() * sizeof(Sphere);
     bdesc.StructureByteStride = sizeof(Sphere);
     g_D3D11Device->CreateBuffer(&bdesc, NULL, &g_DataSpheres);
-    srvDesc.Buffer.NumElements = kSphereCount;
+    srvDesc.Buffer.NumElements = scene.GetSphereSize();
     g_D3D11Device->CreateShaderResourceView(g_DataSpheres, &srvDesc, &g_SRVSpheres);
 
-    bdesc.ByteWidth = kMaterialCount * sizeof(Material);
+    bdesc.ByteWidth = scene.GetMaterialSize() * sizeof(Material);
     bdesc.StructureByteStride = sizeof(Material);
     g_D3D11Device->CreateBuffer(&bdesc, NULL, &g_DataMaterials);
-    srvDesc.Buffer.NumElements = kMaterialCount;
+    srvDesc.Buffer.NumElements = scene.GetMaterialSize();
     g_D3D11Device->CreateShaderResourceView(g_DataMaterials, &srvDesc, &g_SRVMaterials);
 }
 
-static void RenderFrame()
+static void RenderFrame(TestScene& scene)
 {
     ComputeParams dataParams;
     dataParams.frames = s_FrameCount;
     dataParams.lerpFactor = float(s_FrameCount) / float(s_FrameCount + 1);
-    dataParams.camera = MakeCamera(float3(13, 2, 3), float3(0, 0, 0), float3(0, 1, 0), 60, float(kBackbufferWidth) / float(kBackbufferHeight), 0.1, 10);
-    dataParams.camera = MakeCamera(float3(3, 3, 2), float3(0, 0, -1), float3(0, 1, 0), 20, float(kBackbufferWidth) / float(kBackbufferHeight), 0.5, 5.2);
-    dataParams.count = kSphereCount;
+    dataParams.camera = MakeCamera(float3(13, 2, 3), float3(0, 0, 0), float3(0, 1, 0), 20, float(kBackbufferWidth) / float(kBackbufferHeight), 0.1, 10);
+    //dataParams.camera = MakeCamera(float3(3, 3, 2), float3(0, 0, -1), float3(0, 1, 0), 20, float(kBackbufferWidth) / float(kBackbufferHeight), 0.5, 5.2);
+    dataParams.count = scene.GetSphereSize();
     g_D3D11Ctx->UpdateSubresource(g_DataParams, 0, NULL, &dataParams, 0, 0);
 
-    g_D3D11Ctx->UpdateSubresource(g_DataSpheres, 0, NULL, &s_Spheres, 0, 0);
-    g_D3D11Ctx->UpdateSubresource(g_DataMaterials, 0, NULL, &s_Materials, 0, 0);
+    void* dataSpheres = alloca(scene.GetSphereSize() * sizeof(Sphere));
+    void* dataMaterials = alloca(scene.GetMaterialSize() * sizeof(Material));
+    scene.GetData(dataSpheres, dataMaterials);
+    g_D3D11Ctx->UpdateSubresource(g_DataSpheres, 0, NULL, dataSpheres, 0, 0);
+    g_D3D11Ctx->UpdateSubresource(g_DataMaterials, 0, NULL, dataMaterials, 0, 0);
 
     g_BackbufferIndex = 1 - g_BackbufferIndex;
     g_D3D11Ctx->CSSetShader(g_ComputeShader, NULL, 0);

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Config.h"
+#define PI 3.1415926535898
+#define DEGREES_TO_RANDIANS 0.017453292519943
 
 ///////////////////////////
 struct Camera
@@ -12,7 +13,7 @@ struct Camera
     float3 u, v, w;
     float lensRadius;
 };
-Camera MakeCamera(float3 origin, float3 lookAt, float3 up, float fov, float aspect, float aperture, float focusDist)
+static Camera MakeCamera(float3 origin, float3 lookAt, float3 up, float fov, float aspect, float aperture, float focusDist)
 {
     Camera camera;
     camera.lensRadius = aperture / 2;

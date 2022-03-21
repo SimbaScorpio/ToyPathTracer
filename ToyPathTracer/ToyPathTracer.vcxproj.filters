@@ -18,6 +18,9 @@
     <ClCompile Include="WinMain.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="TestScene.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="VertexShader.hlsl">
@@ -38,6 +41,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Maths.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TestScene.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
