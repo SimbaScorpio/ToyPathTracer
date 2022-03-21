@@ -44,15 +44,25 @@ static ID3D11Buffer* g_DataParams;
 static ID3D11ShaderResourceView* g_SRVParams;
 static ID3D11Buffer* g_DataSpheres;     
 static ID3D11ShaderResourceView* g_SRVSpheres;
+static ID3D11Buffer* g_DataMaterials;
+static ID3D11ShaderResourceView* g_SRVMaterials;
 
 static Sphere s_Spheres[] =
 {
-    {float3(0,-100.5,-1), 100},
-    {float3(0,0,-1), 0.5f},
-    {float3(1,0,-1), 0.5f},
-    {float3(-1,0,-1), 0.5f}
+    {0, float3(0, -100.5, -1), 100},
+    {0, float3(0, 0, -1), 0.5f},
+    {1, float3(1, 0, -1), 0.5f},
+    {2, float3(-1, 0, -1), 0.5f}
 };
-const int kSphereCount = sizeof(s_Spheres) / sizeof(s_Spheres[0]);
+const int kSphereCount = sizeof(s_Spheres) / sizeof(Sphere);
+
+static Material s_Materials[] =
+{
+    {0, float3(0.5, 0.5, 0.5)},
+    {1, float3(0.5, 0.1, 0.5), 0.3},
+    {2, float3(0.5, 0.1, 0.5), 0, 1.5}
+};
+const int kMaterialCount = sizeof(s_Materials) / sizeof(Material);
 
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int nCmdShow)
@@ -349,6 +359,12 @@ void InitRenderResource()
     g_D3D11Device->CreateBuffer(&bdesc, NULL, &g_DataSpheres);
     srvDesc.Buffer.NumElements = kSphereCount;
     g_D3D11Device->CreateShaderResourceView(g_DataSpheres, &srvDesc, &g_SRVSpheres);
+
+    bdesc.ByteWidth = kMaterialCount * sizeof(Material);
+    bdesc.StructureByteStride = sizeof(Material);
+    g_D3D11Device->CreateBuffer(&bdesc, NULL, &g_DataMaterials);
+    srvDesc.Buffer.NumElements = kMaterialCount;
+    g_D3D11Device->CreateShaderResourceView(g_DataMaterials, &srvDesc, &g_SRVMaterials);
 }
 
 static void RenderFrame()
@@ -361,13 +377,15 @@ static void RenderFrame()
     g_D3D11Ctx->UpdateSubresource(g_DataParams, 0, NULL, &dataParams, 0, 0);
 
     g_D3D11Ctx->UpdateSubresource(g_DataSpheres, 0, NULL, &s_Spheres, 0, 0);
+    g_D3D11Ctx->UpdateSubresource(g_DataMaterials, 0, NULL, &s_Materials, 0, 0);
 
     g_BackbufferIndex = 1 - g_BackbufferIndex;
     g_D3D11Ctx->CSSetShader(g_ComputeShader, NULL, 0);
     ID3D11ShaderResourceView* srvs[] = {
         g_BackbufferIndex == 0 ? g_BackbufferSRV2 : g_BackbufferSRV1,
         g_SRVParams,
-        g_SRVSpheres
+        g_SRVSpheres,
+        g_SRVMaterials
     };
     g_D3D11Ctx->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
     ID3D11UnorderedAccessView* uavs[] = {

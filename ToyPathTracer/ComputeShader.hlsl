@@ -1,10 +1,13 @@
 #include "Config.h"
 #include "SharedDataStruct.h"
 
+// SRV
 Texture2D srcImage : register(t0);
-RWTexture2D<float4> dstImage : register(u0);
 StructuredBuffer<ComputeParams> g_Params : register(t1);
 StructuredBuffer<Sphere> g_Spheres : register(t2);
+StructuredBuffer<Material> g_Materials : register(t3);
+// UAV
+RWTexture2D<float4> dstImage : register(u0);
 
 ///////////////////////////
 struct Ray
@@ -23,12 +26,20 @@ float3 RayPointAt(Ray r, float t)
 {
     return r.origin + r.dir * t;
 }
+float3 Refract(float3 dir, float3 normal, float refraction)
+{
+    float theta = min(dot(-dir, normal), 1.0);
+    float3 perp = refraction * (dir + theta * normal);
+    float3 parallel = -sqrt(abs(1.0 - dot(perp, perp))) * normal;
+    return perp + parallel;
+}
 
 struct HitRecord
 {
     float3 position;
     float3 normal;
     bool isFrontFace;
+    int material;
 };
 
 ///////////////////////////
@@ -114,11 +125,64 @@ bool HitWorld(Ray ray, float tMin, float tMax, int count, inout HitRecord record
                     record.normal = normal;
                 else
                     record.normal = -normal;
+                record.material = sphere.material;
                 tMax = step;
             }
         }
     }
     return hit;
+}
+
+bool Scatter(in HitRecord record, inout float3 color, inout Ray ray, inout uint seed)
+{
+    Material material = g_Materials[record.material];
+    int type = material.type;
+
+    // Lambertian
+    if (type == 0)
+    {   
+        color *= material.albedo;
+        ray.origin = record.position;
+        ray.dir = normalize(record.normal + RandomUnitVector(seed));
+        return true;
+    }
+    // Metal
+    else if (type == 1)
+    {
+        color *= material.albedo;
+        ray.origin = record.position;
+        ray.dir = reflect(ray.dir, record.normal);
+        ray.dir += material.fuzziness * RandomInUnitSphere(seed);
+        ray.dir = normalize(ray.dir);
+        return dot(ray.dir, record.normal) > 0;
+    }
+    // Dielectric
+    else if (type == 2)
+    {
+        ray.origin = record.position;
+        float refraction = material.refraction;
+        if (record.isFrontFace)
+        {
+            refraction = 1.0 / refraction;
+        }
+        // Total Internal Reflection
+        double cosTheta = min(dot(-ray.dir, record.normal), 1.0);
+        double sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+        bool cannotRefract = refraction * sinTheta > 1.0;
+
+        // Use Schlick's approximation for reflectance
+        float r0 = (1 - refraction) / (1 + refraction);
+        r0 = r0 * r0;
+        float reflectance = r0 + (1 - r0) * pow((1 - cosTheta), 5);
+
+        if (cannotRefract || reflectance > RandomFloat01(seed))
+            ray.dir = reflect(ray.dir, record.normal);
+        else
+            ray.dir = normalize(Refract(ray.dir, record.normal, refraction));
+
+        return true;
+    }
+    return false;
 }
 
 float3 Trace(Ray ray, int count, inout uint seed)
@@ -129,9 +193,10 @@ float3 Trace(Ray ray, int count, inout uint seed)
         HitRecord record;
         if (HitWorld(ray, kMinT, kMaxT, count, record))
         {
-            color *= 0.5;//attenuation;
-            ray.origin = record.position;
-            ray.dir = normalize(record.normal + RandomUnitVector(seed));
+            if (!Scatter(record, color, ray, seed))
+            {
+                return float3(0, 0, 0);
+            }
         }
         else
         {

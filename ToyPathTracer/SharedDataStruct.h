@@ -32,15 +32,25 @@ Camera MakeCamera(float3 origin, float3 lookAt, float3 up, float fov, float aspe
 ///////////////////////////
 struct Sphere
 {
+    int material;
     float3 center;
     float radius;
+};
+
+///////////////////////////
+struct Material
+{
+    int type;
+    float3 albedo;
+    float fuzziness;
+    float refraction;
 };
 
 ///////////////////////////
 struct ComputeParams
 {
     int frames;
-    float lerpFactor;
     Camera camera;
     int count;
+    float lerpFactor;
 };
