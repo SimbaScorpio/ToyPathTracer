@@ -47,20 +47,36 @@ static ID3D11ShaderResourceView* g_SRVSpheres;
 static ID3D11Buffer* g_DataMaterials;
 static ID3D11ShaderResourceView* g_SRVMaterials;
 
+//static Sphere s_Spheres[] =
+//{
+//    {0, float3(0, -1000, 0), 1000},
+//    {1, float3(0, 1, 0), 1},
+//    {2, float3(-4, 1, 0), 1},
+//    {3, float3(4, 1, 0), 1}
+//};
 static Sphere s_Spheres[] =
 {
     {0, float3(0, -100.5, -1), 100},
-    {0, float3(0, 0, -1), 0.5f},
-    {1, float3(1, 0, -1), 0.5f},
-    {2, float3(-1, 0, -1), 0.5f}
+    {1, float3(0, 0, -1), 0.5},
+    {2, float3(-1, 0, -1), 0.5},
+    {2, float3(-1, 0, -1), -0.45},
+    {3, float3(1, 0, -1), 0.5}
 };
 const int kSphereCount = sizeof(s_Spheres) / sizeof(Sphere);
 
+//static Material s_Materials[] =
+//{
+//    {0, float3(0.5, 0.5, 0.5)},
+//    {2, float3(0, 0, 0), 0, 1.5},
+//    {0, float3(0.4, 0.2, 0.1)},
+//    {1, float3(0.7, 0.6, 0.5), 0}
+//};
 static Material s_Materials[] =
 {
-    {0, float3(0.5, 0.5, 0.5)},
-    {1, float3(0.5, 0.1, 0.5), 0.3},
-    {2, float3(0.5, 0.1, 0.5), 0, 1.5}
+    {0, float3(0.8, 0.8, 0.0)},
+    {0, float3(0.1, 0.2, 0.5)},
+    {2, float3(0, 0, 0), 0, 1.5},
+    {1, float3(0.8, 0.6, 0.2), 0}
 };
 const int kMaterialCount = sizeof(s_Materials) / sizeof(Material);
 
@@ -372,7 +388,8 @@ static void RenderFrame()
     ComputeParams dataParams;
     dataParams.frames = s_FrameCount;
     dataParams.lerpFactor = float(s_FrameCount) / float(s_FrameCount + 1);
-    dataParams.camera = MakeCamera(float3(0, 0, 2), float3(0, 0, -1), float3(0, 1, 0), 60, float(kBackbufferWidth) / float(kBackbufferHeight), 0, 10);
+    dataParams.camera = MakeCamera(float3(13, 2, 3), float3(0, 0, 0), float3(0, 1, 0), 60, float(kBackbufferWidth) / float(kBackbufferHeight), 0.1, 10);
+    dataParams.camera = MakeCamera(float3(3, 3, 2), float3(0, 0, -1), float3(0, 1, 0), 20, float(kBackbufferWidth) / float(kBackbufferHeight), 0.5, 5.2);
     dataParams.count = kSphereCount;
     g_D3D11Ctx->UpdateSubresource(g_DataParams, 0, NULL, &dataParams, 0, 0);
 
