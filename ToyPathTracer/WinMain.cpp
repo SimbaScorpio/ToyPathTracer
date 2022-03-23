@@ -4,6 +4,9 @@
 #include <exception>
 #include <iostream>
 
+#include <imm.h>
+#pragma comment (lib ,"imm32.lib")
+
 #include "Config.h"
 #include "TestScene.h"
 
@@ -110,6 +113,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     if (!hWnd)
         return FALSE;
     g_Wnd = hWnd;
+    ImmAssociateContext(hWnd, NULL);
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
     return TRUE;
@@ -119,17 +123,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
-    case WM_PAINT:
-        {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hWnd, &ps);
-            EndPaint(hWnd, &ps);
-        }
-        break;
     case WM_DESTROY:
         PostQuitMessage(0);
-        break;
-    case WM_CHAR:
         break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
