@@ -252,22 +252,26 @@ void InitRenderResource(TestScene& scene)
     UINT compileFlags = 0;
 #endif
 
-    std::wstring vertPath = L"VertexShader.hlsl";
-    std::wstring fragPath = L"PixelShader.hlsl";
-    std::wstring compPath = L"ComputeShader.hlsl";
-    try
+    HRESULT VertexShaderLoaded = D3DReadFileToBlob(L"VertexShader.cso", &vertexShaderBlob);
+    HRESULT PixelShaderLoaded = D3DReadFileToBlob(L"PixelShader.cso", &pixelShaderBlob);  
+    HRESULT ComputeShaderLoaded = D3DReadFileToBlob(L"ComputeShader.cso", &computeShaderBlob);
+
+    if (VertexShaderLoaded != S_OK || PixelShaderLoaded != S_OK || ComputeShaderLoaded != S_OK)
     {
-        D3DCompileFromFile(vertPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-                           "main", "vs_5_0", compileFlags, 0, &vertexShaderBlob, &errors);
-        D3DCompileFromFile(fragPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-                           "main", "ps_5_0", compileFlags, 0, &pixelShaderBlob, &errors);
-        D3DCompileFromFile(compPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-                           "main", "cs_5_0", compileFlags, 0, &computeShaderBlob, &errors);
-    }
-    catch (const std::exception& e)
-    {
-        const char* errStr = (const char*)errors->GetBufferPointer();
-        std::cout << errStr << std::endl;
+        try
+        {
+            D3DCompileFromFile(L"VertexShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                               "main", "vs_5_0", compileFlags, 0, &vertexShaderBlob, &errors);
+            D3DCompileFromFile(L"PixelShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                               "main", "ps_5_0", compileFlags, 0, &pixelShaderBlob, &errors);
+            D3DCompileFromFile(L"ComputeShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                               "main", "cs_5_0", compileFlags, 0, &computeShaderBlob, &errors);
+        }
+        catch (const std::exception& e)
+        {
+            const char* errStr = (const char*)errors->GetBufferPointer();
+            std::cout << errStr << std::endl;
+        }
     }
 
     g_D3D11Device->CreateVertexShader(vertexShaderBlob->GetBufferPointer(),
