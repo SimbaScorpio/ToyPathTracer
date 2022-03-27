@@ -1,6 +1,7 @@
 #pragma once
 
 #include <math.h>
+#include <random>
 
 struct float3
 {
@@ -44,3 +45,6 @@ inline float length(float3 v) { return sqrtf(dot(v, v)); }
 inline float sqLength(float3 v) { return dot(v, v); }
 inline float3 normalize(float3 v) { return v * (1.0f / length(v)); }
 inline float3 lerp(float3 a, float3 b, float t) { return a + (b - a) * t; }
+
+inline float random() { return rand() / (RAND_MAX + 1.0); }
+inline float3 randomFloat3() { return float3(random(), random(), random()); }

@@ -1,15 +1,4 @@
 #include "TestScene.h"
-#include <random>
-
-inline float Random()
-{
-    return rand() / (RAND_MAX + 1.0);
-}
-
-inline float3 RandomVec3()
-{
-    return float3(Random(), Random(), Random());
-}
 
 TestScene::TestScene()
 {
@@ -29,20 +18,20 @@ TestScene::TestScene()
     {
         for (int j = -11; j < 11; ++j)
         {
-            auto index = Random();
-            float3 center(i + 0.9 * Random(), 0.2, j + 0.9 * Random());
+            auto index = random();
+            float3 center(i + 0.9 * random(), 0.2, j + 0.9 * random());
 
             if (length(center - float3(4, 0.2, 0)) > 0.9)
             {
                 if (index < 0.8)
                 {   // diffuse
-                    float3 albedo = RandomVec3() * RandomVec3();
+                    float3 albedo = randomFloat3() * randomFloat3();
                     materials.push_back({ 0, albedo });
                 }
                 else if (index < 0.95)
                 {   // metal
-                    float3 albedo = RandomVec3() * 0.5 + 0.5;
-                    float fuzz = Random() * 0.5;
+                    float3 albedo = randomFloat3() * 0.5 + 0.5;
+                    float fuzz = random() * 0.5;
                     materials.push_back({ 1, albedo, fuzz });
                 }
                 else

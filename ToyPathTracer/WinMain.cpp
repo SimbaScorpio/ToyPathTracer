@@ -359,11 +359,13 @@ static void RenderFrame(TestScene& scene)
     dataParams.count = scene.GetSphereSize();
     g_D3D11Ctx->UpdateSubresource(g_DataParams, 0, NULL, &dataParams, 0, 0);
 
-    void* dataSpheres = alloca(scene.GetSphereSize() * sizeof(Sphere));
-    void* dataMaterials = alloca(scene.GetMaterialSize() * sizeof(Material));
+    void* dataSpheres = malloc(scene.GetSphereSize() * sizeof(Sphere));
+    void* dataMaterials = malloc(scene.GetMaterialSize() * sizeof(Material));
     scene.GetData(dataSpheres, dataMaterials);
     g_D3D11Ctx->UpdateSubresource(g_DataSpheres, 0, NULL, dataSpheres, 0, 0);
     g_D3D11Ctx->UpdateSubresource(g_DataMaterials, 0, NULL, dataMaterials, 0, 0);
+    free(dataSpheres);
+    free(dataMaterials);
 
     g_BackbufferIndex = 1 - g_BackbufferIndex;
     g_D3D11Ctx->CSSetShader(g_ComputeShader, NULL, 0);
