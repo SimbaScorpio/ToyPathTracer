@@ -48,7 +48,10 @@ static ID3D11Buffer* g_DataSpheres;
 static ID3D11ShaderResourceView* g_SRVSpheres;
 static ID3D11Buffer* g_DataMaterials;
 static ID3D11ShaderResourceView* g_SRVMaterials;
+static ID3D11Buffer* g_DataCounter;
+static ID3D11UnorderedAccessView* g_UAVCounter;
 
+static ID3D11Query* g_QueryBegin, * g_QueryEnd, * g_QueryDisjoint;
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int nCmdShow)
 {
@@ -347,6 +350,25 @@ void InitRenderResource(TestScene& scene)
     g_D3D11Device->CreateBuffer(&bdesc, NULL, &g_DataMaterials);
     srvDesc.Buffer.NumElements = scene.GetMaterialSize();
     g_D3D11Device->CreateShaderResourceView(g_DataMaterials, &srvDesc, &g_SRVMaterials);
+
+    bdesc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+    bdesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+    bdesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    bdesc.ByteWidth = 4;
+    g_D3D11Device->CreateBuffer(&bdesc, NULL, &g_DataCounter);
+    uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+    uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+    uavDesc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+    uavDesc.Buffer.FirstElement = 0;
+    uavDesc.Buffer.NumElements = 1;
+    g_D3D11Device->CreateUnorderedAccessView(g_DataCounter, &uavDesc, &g_UAVCounter);
+
+    D3D11_QUERY_DESC qDesc = {};
+    qDesc.Query = D3D11_QUERY_TIMESTAMP;
+    g_D3D11Device->CreateQuery(&qDesc, &g_QueryBegin);
+    g_D3D11Device->CreateQuery(&qDesc, &g_QueryEnd);
+    qDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+    g_D3D11Device->CreateQuery(&qDesc, &g_QueryDisjoint);
 }
 
 static void RenderFrame(TestScene& scene)
@@ -378,9 +400,13 @@ static void RenderFrame(TestScene& scene)
     g_D3D11Ctx->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
     ID3D11UnorderedAccessView* uavs[] = {
         g_BackbufferIndex == 0 ? g_BackbufferUAV1 : g_BackbufferUAV2,
+        g_UAVCounter
     };
     g_D3D11Ctx->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, NULL);
+    g_D3D11Ctx->Begin(g_QueryDisjoint);
+    g_D3D11Ctx->End(g_QueryBegin);
     g_D3D11Ctx->Dispatch(kBackbufferWidth / kCSGroupSizeX, kBackbufferHeight / kCSGroupSizeY, 1);
+    g_D3D11Ctx->End(g_QueryEnd);
     uavs[0] = NULL;
     g_D3D11Ctx->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, NULL);
 
@@ -392,6 +418,47 @@ static void RenderFrame(TestScene& scene)
     g_D3D11Ctx->RSSetState(g_RasterState);
     g_D3D11Ctx->Draw(3, 0);
     g_D3D11SwapChain->Present(0, 0);
-
     ++s_FrameCount;
+    g_D3D11Ctx->End(g_QueryDisjoint);
+
+    while (g_D3D11Ctx->GetData(g_QueryDisjoint, NULL, 0, 0) == S_FALSE) { Sleep(0); }
+    D3D10_QUERY_DATA_TIMESTAMP_DISJOINT tsDisjoint;
+    g_D3D11Ctx->GetData(g_QueryDisjoint, &tsDisjoint, sizeof(tsDisjoint), 0);
+    if (!tsDisjoint.Disjoint)
+    {
+        UINT64 tsBegin, tsEnd;
+        // Note: on some GPUs/drivers, even when the disjoint query above already said "yeah I have data",
+        // might still not return "I have data" for timestamp queries before it.
+        while (g_D3D11Ctx->GetData(g_QueryBegin, &tsBegin, sizeof(tsBegin), 0) == S_FALSE) { Sleep(0); }
+        while (g_D3D11Ctx->GetData(g_QueryEnd, &tsEnd, sizeof(tsEnd), 0) == S_FALSE) { Sleep(0); }
+
+        static float s_Time;
+        s_Time += float(tsEnd - tsBegin) / float(tsDisjoint.Frequency);
+
+        static uint64_t s_RayCounter;
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        g_D3D11Ctx->Map(g_DataCounter, 0, D3D11_MAP_READ, 0, &mapped);
+        s_RayCounter += *(const int*)mapped.pData;
+        g_D3D11Ctx->Unmap(g_DataCounter, 0);
+        int zeroCount = 0;
+        g_D3D11Ctx->UpdateSubresource(g_DataCounter, 0, NULL, &zeroCount, 0, 0);
+
+        static float s_Count;
+        if (++s_Count > 150)
+        {
+            float avgTime = s_Time / s_Count;
+            float avgRayCounter = s_RayCounter / s_Count;
+            char s_Buffer[200];
+            sprintf_s(s_Buffer, sizeof(s_Buffer), "%.2fms (%.1f FPS) %.1fMrays/s %.2fMrays/frame frames %i\n",
+                      avgTime * 1000.0f,
+                      1.f / avgTime,
+                      avgRayCounter / avgTime * 1.0e-6f,
+                      avgRayCounter * 1.0e-6f,
+                      s_FrameCount);
+            SetWindowTextA(g_Wnd, s_Buffer);
+            s_Count = 0;
+            s_Time = 0;
+            s_RayCounter = 0;
+        }
+    }
 }

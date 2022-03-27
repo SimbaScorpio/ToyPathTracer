@@ -8,6 +8,7 @@ StructuredBuffer<Sphere> g_Spheres : register(t2);
 StructuredBuffer<Material> g_Materials : register(t3);
 // UAV
 RWTexture2D<float4> dstImage : register(u0);
+RWByteAddressBuffer g_RayCounter : register(u1);
 
 ///////////////////////////
 struct Ray
@@ -185,11 +186,12 @@ bool Scatter(in HitRecord record, inout float3 color, inout Ray ray, inout uint 
     return false;
 }
 
-float3 Trace(Ray ray, int count, inout uint seed)
+float3 Trace(Ray ray, int count, inout uint rayCount, inout uint seed)
 {
     float3 color = 1;
     for (int depth = kMaxDepth; depth > 0; --depth)
     {
+        ++rayCount;
         HitRecord record;
         if (HitWorld(ray, kMinT, kMaxT, count, record))
         {
@@ -216,13 +218,14 @@ void main(uint3 gid : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
     ComputeParams params = g_Params[0];
 
     float3 color = 0;
+    uint rayCount = 0;
     uint seed = (gid.x * 1973 + gid.y * 9277 + params.frames * 26699) | 1;
     for (int i = 0; i < SAMPLES_PER_PIXEL; ++i)
     {
         float u = float(gid.x + RandomFloat01(seed)) / kBackbufferWidth;
         float v = float(gid.y + RandomFloat01(seed)) / kBackbufferHeight;
         Ray ray = CameraGetRay(params.camera, u, v, seed);
-        color += Trace(ray, params.count, seed);
+        color += Trace(ray, params.count, rayCount, seed);
     }
     color /= float(SAMPLES_PER_PIXEL);
 
@@ -230,4 +233,6 @@ void main(uint3 gid : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
     float3 curr = lerp(color, prev, params.lerpFactor);
 
     dstImage[gid.xy] = float4(curr, 1.0);
+
+    g_RayCounter.InterlockedAdd(0, rayCount);
 }
