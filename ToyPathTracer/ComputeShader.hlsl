@@ -212,7 +212,7 @@ float3 Trace(Ray ray, int count, inout uint rayCount, inout uint seed)
 }
 
 ///////////////////////////
-[numthreads(kCSGroupSizeX, kCSGroupSizeX, 1)]
+[numthreads(kCSGroupSizeX, kCSGroupSizeY, 1)]
 void main(uint3 gid : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
 {
     ComputeParams params = g_Params[0];
